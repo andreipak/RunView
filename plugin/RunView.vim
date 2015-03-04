@@ -1,7 +1,7 @@
 " RunView:
 "   Author: Charles E. Campbell
-"   Date:   Nov 25, 2013
-"   Version: 3
+"   Date:   Oct 08, 2014
+"   Version: 4c	ASTRO-ONLY
 " Copyright:    Copyright (C) 2005-2013 Charles E. Campbell {{{1
 "               Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this copyright
@@ -18,13 +18,15 @@
 if &cp || exists("g:loaded_RunView")
  finish
 endif
-let g:loaded_RunView= "v3h"
+let g:loaded_RunView= "v4cNR"
 "DechoTabOn
 
 " ---------------------------------------------------------------------
 "  Defaults: {{{1
-if !exists("g:runview_filtcmd")
- let g:runview_filtcmd= "ksh"
+if  exists("g:runview_filtcmd") && !exists("b:runview_filtcmd")
+ let b:runview_filtcmd= g:runview_filtcmd
+elseif !exists("b:runview_filtcmd")
+ let b:runview_filtcmd= "ksh"
 endif
 if !exists("g:runview_swapwin")
  let g:runview_swapwin= 1
@@ -62,33 +64,50 @@ fun! s:RunView(v,...) range
   " set splitright to zero while in this function
   let keep_splitright= &splitright
   let keep_splitbelow= &splitbelow
-  set nosplitright nosplitbelow
+  setl nosplitright nosplitbelow
 
-  " if arg provided, use it as filter-command.  Use it for the default next time.
-  " Otherwise, use g:runview_filtcmd.
+  " If there's an argument of "-", then apply subsequent arguments to filter command:
+  "    :RV - arg1 arg2 arg3 ...
+  "    ie. the filter used is: b:runview_filtcmd arg1 arg2 arg3
+  " Otherwise, if an argument provided, use it as filter-command.  Use it as the current filter subsequently.
+  " Otherwise, use the current filter.
+  "   The current filter defaults to  b:runview_filtcmd  if it exists
+  "                                   g:runview_filtcmd  if it exists
+  "                                   "ksh"              otherwise
+  " The current filter is stored in:  b:runview_filtcmd
   if a:0 > 0 && a:1 != ""
-   if a:1 =~ '^-'
+   if a:1 =~ '^-$'
     let filtcmd = b:runview_filtcmd
-    let i       = 1
+    let i       = 2
 	while i <= a:0
 	 let filtcmd = filtcmd." ".a:{i}
 	 let i       = i + 1
 	endwhile
    else
     " use argument as filter command
-    let filtcmd           = a:1
-    let g:runview_filtcmd = filtcmd
+    let b:runview_filtcmd = a:1
+	let filtcmd           = a:1
    endif
   elseif exists("b:runview_filtcmd")
    " use buffer-local filter command
-   let filtcmd= b:runview_filtcmd
+   let filtcmd            = b:runview_filtcmd
   else
    " use default filter command
-   let filtcmd= g:runview_filtcmd
+   let filtcmd            = b:runview_filtcmd
   endif
   let filtcmdfile= substitute(filtcmd,' .*$','','')
 "  call Decho("filtcmd<".filtcmd.">")
 "  call Decho("filtcmdfile<".filtcmdfile.">")
+  " sanity check
+  let barecmd= substitute(filtcmd,'\s.*$','','')
+  if !executable(barecmd)
+   echohl WarningMsg
+   echomsg "***warning*** filtcmd<".barecmd."> not executable!"
+   echohl None
+"   call Decho("failed sanity check: filtcmd<".barecmd."> is NOT executable")
+  else
+"   call Decho("passed sanity check: filtcmd<".barecmd."> is executable")
+  endif
 
   " get a copy of the selected lines
   let keepa   = @a
@@ -108,11 +127,11 @@ fun! s:RunView(v,...) range
   if bufexists(filtcmdfile)
    " output window already exists by given name.
    " Place delimiter and append output to it
-"   call Decho("output window<".g:runview_filtcmd."> already exists, appending to it")
+"   call Decho("output window<".filtcmdfile."> already exists, appending to it")
    let curwin  = winnr()
    let bufout  = bufwinnr(filtcmdfile)
    exe bufout."wincmd w"
-   set ma
+   setl ma
    let lastline= line("$")
 "   call Decho("lastline=".lastline)
    let delimstring = "===".strftime("%m/%d/%y %H:%M:%S")."==="
@@ -131,7 +150,7 @@ fun! s:RunView(v,...) range
     exe "sil ".lastlinep2.",$!".filtcmd
    endif
 
-   set noma nomod bh=wipe
+   setl noma nomod bh=wipe
    $
    call search('^===','bcW')
    exe "norm! z\<cr>"
@@ -167,8 +186,8 @@ fun! s:RunView(v,...) range
    call setline(1,title)
    call setline(2,delimstring)
    sil 3
-   set ft=runview
-   set noma nomod
+   setl ft=runview
+   setl noma nomod
    $
    call search('^===','bcW')
    exe "norm! z\<cr>"
@@ -192,6 +211,9 @@ fun! s:RunView(v,...) range
   " restore position in script buffer
 "  call Decho("restoring winposn")
   call RestoreWinPosn(s:winposn)
+
+  " place cursor in results window
+  wincmd w
 
 "  call Dret("RunView")
 endfun
